@@ -1,0 +1,56 @@
+# Copy to config.yaml and replace the angle-bracket placeholders.
+# Use fully qualified DNS names with a trailing dot.
+listen:
+  ipv4: "<IPV4_BIND_ADDRESS>"
+  ipv6: "<IPV6_BIND_ADDRESS>"
+  port: 53
+
+control_ipv4: "<IPV4_CONTROL_ADDRESS>"
+control_ipv6: "<IPV6_CONTROL_ADDRESS>"
+load_log: "load.csv"
+answer_ttl: 600
+
+records:
+  "<MIRROR_FQDN>": {}
+  "<IPV6_MIRROR_FQDN>": {}
+  "<SLOW_IPV4_MIRROR_FQDN>": {delay_on: ipv4}
+  "<SLOW_IPV6_MIRROR_FQDN>": {delay_on: ipv6}
+
+ns_records:
+  "<MIRROR_FQDN>": ipv4
+  "<ZONE_FQDN>": ipv4
+  "<IPV6_MIRROR_FQDN>": ipv6
+  "<IPV6_ZONE_FQDN>": ipv6
+  "<SLOW_IPV4_MIRROR_FQDN>": dual
+  "<SLOW_IPV4_ZONE_FQDN>": dual
+  "<SLOW_IPV6_MIRROR_FQDN>": dual
+  "<SLOW_IPV6_ZONE_FQDN>": dual
+
+# Set false to silently drop SOA queries.
+serve_soa: true
+
+# Only put delegated zone apexes here. The primary nameserver comes from ns_records.
+soa_records:
+  "<ZONE_FQDN>": &soa_defaults
+    mailbox: "<SOA_MAILBOX_FQDN>"
+    serial: 1
+    refresh: 7200
+    retry: 900
+    expire: 1209600
+    minimum: 300
+    ttl: 600
+  "<IPV6_ZONE_FQDN>": *soa_defaults
+  "<SLOW_IPV4_ZONE_FQDN>": *soa_defaults
+  "<SLOW_IPV6_ZONE_FQDN>": *soa_defaults
+
+nameservers:
+  ipv4:
+    name: "<IPV4_NAMESERVER_FQDN>"
+    ipv4: "<IPV4_NAMESERVER_ADDRESS>"
+  ipv6:
+    name: "<IPV6_NAMESERVER_FQDN>"
+    ipv6: "<IPV6_NAMESERVER_ADDRESS>"
+  dual:
+    name: "<DUAL_STACK_NAMESERVER_FQDN>"
+    ipv4: "<DUAL_STACK_NAMESERVER_IPV4_ADDRESS>"
+    ipv6: "<DUAL_STACK_NAMESERVER_IPV6_ADDRESS>"
