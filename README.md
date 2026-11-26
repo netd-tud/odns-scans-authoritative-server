@@ -25,6 +25,15 @@ cp -i config.template.yaml config.yaml
 
 After editing the config, run `./rr-mirror`. It reads `config.yaml` from the working directory and uses the configured IPv4 address and port. Use `-config` to select another file or `-mode ipv6` to select the configured IPv6 address. Use `-ip` and `-port` to override the listener with a literal IP address and UDP port. Wildcard addresses listen on all interfaces of the selected IP family.
 
+On Linux, you can grant the binary permission to bind to port 53 and then run it as your regular user. That user will own newly created log files.
+
+```sh
+sudo setcap 'cap_net_bind_service=ep' ./rr-mirror
+./rr-mirror
+```
+
+Reapply `setcap` after a rebuild replaces the binary.
+
 For a local check, set `DNS_SERVER_IP` to the listener address, `DNS_PORT` to its port, and `MIRROR_FQDN` and `ZONE_FQDN` to names you configured.
 
 ```sh
