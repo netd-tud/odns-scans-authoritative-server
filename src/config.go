@@ -17,7 +17,40 @@ type listenConfig struct {
 	Port int    `yaml:"port"`
 }
 
-func (c listenConfig) endpoint(mode, override string) (string, string, error) {
+type listenEndpoint struct {
+	address string
+	network string
+	family  string
+}
+
+func (c listenConfig) endpoints(mode, override string) ([]listenEndpoint, error) {
+	if !strings.EqualFold(mode, "both") {
+		endpoint, err := c.endpoint(mode, override)
+		return []listenEndpoint{endpoint}, err
+	}
+	if override != "" {
+		ip := net.ParseIP(override)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid listen IP %q", override)
+		}
+		if ip.To4() != nil {
+			c.IPv4 = override
+		} else {
+			c.IPv6 = override
+		}
+	}
+	ipv4, err := c.endpoint("ipv4", "")
+	if err != nil {
+		return nil, err
+	}
+	ipv6, err := c.endpoint("ipv6", "")
+	if err != nil {
+		return nil, err
+	}
+	return []listenEndpoint{ipv4, ipv6}, nil
+}
+
+func (c listenConfig) endpoint(mode, override string) (listenEndpoint, error) {
 	var ip string
 	switch strings.ToLower(mode) {
 	case "ipv4":
@@ -25,27 +58,32 @@ func (c listenConfig) endpoint(mode, override string) (string, string, error) {
 	case "ipv6":
 		ip = c.IPv6
 	default:
-		return "", "", fmt.Errorf("invalid mode %q, expected ipv4 or ipv6", mode)
+		return listenEndpoint{}, fmt.Errorf("invalid mode %q, expected ipv4, ipv6, or both", mode)
 	}
 	if override != "" {
 		ip = override
 	}
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
-		return "", "", fmt.Errorf("invalid listen IP %q", ip)
+		return listenEndpoint{}, fmt.Errorf("invalid listen IP %q for %s", ip, mode)
 	}
 	ipv4 := parsed.To4() != nil
 	if override == "" && ipv4 != strings.EqualFold(mode, "ipv4") {
-		return "", "", fmt.Errorf("listen IP %q does not match mode %q", ip, mode)
+		return listenEndpoint{}, fmt.Errorf("listen IP %q does not match mode %q", ip, mode)
 	}
 	if c.Port < 1 || c.Port > 65535 {
-		return "", "", fmt.Errorf("invalid listen port %d, expected 1–65535", c.Port)
+		return listenEndpoint{}, fmt.Errorf("invalid listen port %d, expected 1–65535", c.Port)
 	}
-	network := "udp6"
+	endpoint := listenEndpoint{
+		address: net.JoinHostPort(parsed.String(), strconv.Itoa(c.Port)),
+		network: "udp6",
+		family:  "ipv6",
+	}
 	if ipv4 {
-		network = "udp4"
+		endpoint.network = "udp4"
+		endpoint.family = "ipv4"
 	}
-	return net.JoinHostPort(parsed.String(), strconv.Itoa(c.Port)), network, nil
+	return endpoint, nil
 }
 
 type mirrorRecord struct {
@@ -85,7 +123,7 @@ type fileConfig struct {
 }
 
 func readConfig(path string) (fileConfig, error) {
-	config := fileConfig{QueryLog: DefaultQueryLog, QueryLogMaxMB: DefaultQueryLogMaxMB}
+	config := fileConfig{LoadLog: DefaultLoadLog, QueryLog: DefaultQueryLog, QueryLogMaxMB: DefaultQueryLogMaxMB}
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return config, err

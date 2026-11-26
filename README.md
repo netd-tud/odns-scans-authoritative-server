@@ -23,7 +23,13 @@ For a fresh checkout, copy the template, set `parent_domain`, and replace the ad
 cp -i config.template.yaml config.yaml
 ```
 
-After editing the config, run `./rr-mirror`. It reads `config.yaml` from the working directory and uses the configured IPv4 address and port. Use `-config` to select another file or `-mode ipv6` to select the configured IPv6 address. Use `-ip` and `-port` to override the listener with a literal IP address and UDP port. Wildcard addresses listen on all interfaces of the selected IP family.
+After editing the config, run `./rr-mirror`. It reads `config.yaml` from the working directory and uses the configured IPv4 address and port. Use `-config` to select another file, `-mode ipv6` for IPv6 only, or `-mode both` to listen on both configured addresses at the same UDP port.
+
+```sh
+./rr-mirror -mode both
+```
+
+Use `-port` to override the configured port. In `both` mode, `-ip` overrides the configured address for the matching family. Wildcard addresses listen on all interfaces of their own IP family.
 
 On Linux, you can grant the binary permission to bind to port 53 and then run it as your regular user. That user will own newly created log files.
 
@@ -68,23 +74,37 @@ For public DNS, delegate the relevant zones to this server from a parent zone yo
 
 ## Logs
 
-Answered queries go to `logs/queries.csv` as semicolon-delimited CSV.
+Each invocation creates a timestamped run directory under `logs/`. A dual-stack run stores separate query, diagnostic, and load logs for each listener.
+
+```text
+logs/<run>/
+  ipv4/
+    queries.csv
+    queries.csv.log
+    load.csv
+  ipv6/
+    queries.csv
+    queries.csv.log
+    load.csv
+```
+
+Answered queries go to the query CSV with this header.
 
 ```text
 timestamp_unix_ns;query_type;query_name;source_ip
 ```
 
-Use `query_log` or `-logfile` to choose the output file. A bare filename goes in `logs/`. An explicit directory in the path overrides that location. The server creates the directory as needed. The active file rotates before the next row would exceed `query_log_max_mb` or `-log-max-mb`, which defaults to 100 MB (100,000,000 bytes). Archived files keep their CSV header and get a unique timestamped name beside the active file.
+Use `query_log` or `-logfile` to choose the query filename, and `load_log` or `-load-log` to choose the load filename. If a value includes a directory, the server takes its filename and places it inside the listener's run directory. The active query file rotates before the next row would exceed `query_log_max_mb` or `-log-max-mb`, which defaults to 100 MB (100,000,000 bytes). Archived files keep their CSV header and get a unique timestamped name beside the active file.
 
 Rotated query logs are compressed in the background as `.csv.zst`. The original CSV is removed after successful compression. If `zstd` is unavailable or compression fails, the CSV is kept and the diagnostic log records the reason. Use `zstd -dc archive.csv.zst` to read a compressed log.
 
 ```sh
-./rr-mirror -logfile scans.csv -log-max-mb 50
+./rr-mirror -mode both -logfile scans.csv -log-max-mb 50
 ```
 
-A background writer drains a 4,096-row buffer. It drops new rows when the buffer fills. Startup messages, write errors, and drop counts go to the diagnostic file beside the query CSV, for example `logs/scans.csv.log`. A compatible terminal shows a three-line load summary that updates in place once a second. Redirected stdout stays empty.
+A background writer drains a 4,096-row buffer per listener. It drops new rows when the buffer fills. Startup messages, write errors, and drop counts go to the diagnostic file beside the query CSV. A compatible terminal updates the load tables in place once a second, with IPv4 on the left and IPv6 on the right in dual-stack mode. Each table lists the incoming query types and their counts since startup, including unanswered questions. If the list exceeds the display height, it cycles through pages. Redirected stdout stays empty.
 
-The server appends one semicolon-delimited row to `load.csv` at each five-minute UTC boundary, including intervals with zero requests. Set `load_log` in YAML or use `-load-log` to choose a different path. Use separate query and load paths for each server process. A load CSV from before peak tracking is archived beside the active file before the new header is written.
+The server appends one semicolon-delimited row to each listener's load CSV at each five-minute UTC boundary, including intervals with zero requests.
 
 ```text
 window_end_utc;day_utc;avg_requests_per_second;unique_ips_5m;requests_5m;unique_ips_day;requests_day;peak_requests_per_second

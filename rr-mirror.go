@@ -9,11 +9,11 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "YAML configuration file")
-	mode := flag.String("mode", "ipv4", "Configured listen address to use (ipv4 or ipv6)")
+	mode := flag.String("mode", "ipv4", "Listener mode (ipv4, ipv6, or both)")
 	ip := flag.String("ip", "", "Override the listen address with an IPv4 or IPv6 literal")
 	port := flag.Int("port", 0, "Override the configured UDP port")
-	loadLog := flag.String("load-log", "", "Override the configured load CSV path")
-	logfile := flag.String("logfile", server.DefaultQueryLog, "Query CSV path (bare filenames go under logs/)")
+	loadLog := flag.String("load-log", server.DefaultLoadLog, "Override the load CSV filename for each listener")
+	logfile := flag.String("logfile", server.DefaultQueryLog, "Override the query CSV filename for each listener")
 	logMaxMB := flag.Int64("log-max-mb", server.DefaultQueryLogMaxMB, "Rotate query logs at this size in MB")
 	serveSOA := flag.Bool("serve-soa", true, "Enable SOA replies (overrides serve_soa in YAML when set)")
 	answerTTL := flag.Uint64("answer-ttl", server.DefaultAnswerTTL, "Override the A, AAAA, and NS reply TTL in seconds")

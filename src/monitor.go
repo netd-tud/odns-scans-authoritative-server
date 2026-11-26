@@ -9,7 +9,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/miekg/dns"
 )
+
+// DefaultLoadLog is the load CSV filename.
+const DefaultLoadLog = "load.csv"
 
 const loadInterval = 5 * time.Minute
 
@@ -96,19 +101,21 @@ func (c *loadCounts) advance(now time.Time) {
 }
 
 type loadMonitor struct {
-	mu     sync.Mutex
-	counts loadCounts
-	now    func() time.Time
-	stop   chan struct{}
-	done   chan struct{}
+	mu         sync.Mutex
+	counts     loadCounts
+	queryTypes map[uint16]uint64
+	now        func() time.Time
+	stop       chan struct{}
+	done       chan struct{}
 }
 
 func newLoadMonitor(now func() time.Time) *loadMonitor {
 	return &loadMonitor{
-		counts: newLoadCounts(now()),
-		now:    now,
-		stop:   make(chan struct{}),
-		done:   make(chan struct{}),
+		counts:     newLoadCounts(now()),
+		queryTypes: make(map[uint16]uint64),
+		now:        now,
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
 	}
 }
 
@@ -174,13 +181,16 @@ func startLoadMonitor(path string, diagnostics *log.Logger) (*loadMonitor, error
 	return m, nil
 }
 
-func (m *loadMonitor) record(ip string) {
+func (m *loadMonitor) record(ip string, questions []dns.Question) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Sample and count together so a reporting tick cannot close this window in between.
 	now := m.now()
 	m.counts.advance(now)
 	m.counts.record(ip, now)
+	for _, question := range questions {
+		m.queryTypes[question.Qtype]++
+	}
 }
 
 func (m *loadMonitor) close() {

@@ -192,11 +192,11 @@ func (m *mirror) response(req *dns.Msg, q dns.Question, ip net.IP) *dns.Msg {
 
 var queryHeader = []string{"timestamp_unix_ns", "query_type", "query_name", "source_ip"}
 
-func (m *mirror) handler(logQuery func([]string), recordRequest func(string), diagnostics *log.Logger) dns.HandlerFunc {
+func (m *mirror) handler(logQuery func([]string), recordRequest func(string, []dns.Question), diagnostics *log.Logger) dns.HandlerFunc {
 	return func(w dns.ResponseWriter, req *dns.Msg) {
 		ip := w.RemoteAddr().(*net.UDPAddr).IP
 		source := ip.String()
-		recordRequest(source)
+		recordRequest(source, req.Question)
 		if req.Opcode != dns.OpcodeQuery {
 			return
 		}

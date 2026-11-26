@@ -9,7 +9,7 @@ listen:
 control_ipv4: "<IPV4_CONTROL_ADDRESS>"
 control_ipv6: "<IPV6_CONTROL_ADDRESS>"
 load_log: "load.csv"
-query_log: "logs/queries.csv"
+query_log: "queries.csv"
 query_log_max_mb: 100
 answer_ttl: 600
 

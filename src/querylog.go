@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// DefaultQueryLog is the active query CSV path.
-	DefaultQueryLog = "logs/queries.csv"
+	// DefaultQueryLog is the active query CSV filename.
+	DefaultQueryLog = "queries.csv"
 	// DefaultQueryLogMaxMB is the query log rotation threshold in decimal megabytes.
 	DefaultQueryLogMaxMB = 100
 	bytesPerMB           = 1000000
@@ -27,16 +27,6 @@ type rotatingQueryLog struct {
 	encoder   *csvLog
 	header    []byte
 	onArchive func(string)
-}
-
-func resolveQueryLogPath(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("query log path is empty")
-	}
-	if filepath.Base(path) == path {
-		path = filepath.Join(filepath.Dir(DefaultQueryLog), path)
-	}
-	return filepath.Abs(path)
 }
 
 func openQueryLog(path string, maxMB int64) (*rotatingQueryLog, error) {
