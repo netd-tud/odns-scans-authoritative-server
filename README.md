@@ -5,7 +5,7 @@ This UDP DNS server mirrors the source IP it sees on the incoming query, which m
 ## Requirements
 
 - Go 1.15 or newer and Make. The first build needs access to a Go module proxy or a populated module cache.
-- Permission to bind the configured UDP port and write the load log. Port 53 may require additional privileges.
+- Permission to bind the configured UDP port and write the query and load logs. Port 53 may require additional privileges.
 - `dig` for the optional query examples.
 
 ## Build and run
@@ -16,7 +16,7 @@ Run `make` from the project directory to build `rr-mirror`. Run `make clean` to 
 make
 ```
 
-For a fresh checkout, copy the template and replace its angle-bracket placeholders with your addresses and fully qualified DNS names. Git ignores the local `config.yaml`. Keep your existing file if you already have one.
+For a fresh checkout, copy the template, set `parent_domain`, and replace the address placeholders. Git ignores the local `config.yaml`. Keep your existing file if you already have one.
 
 ```sh
 cp -i config.template.yaml config.yaml
@@ -36,6 +36,16 @@ dig @"$DNS_SERVER_IP" -p "$DNS_PORT" "$MIRROR_FQDN" SOA +norecurse
 
 ## DNS configuration
 
+Set `parent_domain` to the common suffix of the DNS names you configure, with or without a trailing dot. The server expands `${parent_domain}` in `records`, `ns_records`, and `soa_records` keys, nameserver targets, and SOA mailboxes. For example, the following record serves `rr-mirror.research.example.test.`.
+
+```yaml
+parent_domain: "example.test"
+records:
+  "rr-mirror.research.${parent_domain}": {}
+```
+
+Literal DNS names are also supported. Configurations with only literal names can omit `parent_domain`.
+
 - `records` maps exact, case-insensitive DNS names to their mirror settings. Use `{}` for the usual reply or set `delay_on` to `ipv4` or `ipv6` to delay A and AAAA replies by one second for queries arriving from that address family.
 - `ns_records` maps exact DNS names to entries in `nameservers`. Each nameserver specifies a DNS name and can include an IPv4 address, an IPv6 address, or both. These advertised addresses are independent of the command-line listener overrides.
 - `soa_records` maps delegated zone apexes to their SOA settings. Each apex must have an entry in `ns_records` for the primary nameserver. Set `mailbox` in SOA DNS-name notation, with a dot in place of the email address's `@`. Increase the serial when the zone data changes. The TTL and timers are in seconds. Existing configs can add this section to enable SOA replies.
@@ -48,18 +58,24 @@ For public DNS, delegate the relevant zones to this server from a parent zone yo
 
 ## Logs
 
-Answered queries go to stdout as semicolon-delimited CSV:
+Answered queries go to `logs/queries.csv` as semicolon-delimited CSV.
 
 ```text
 timestamp_unix_ns;query_type;query_name;source_ip
 ```
 
-Redirect stdout to `queries.csv` to save the query log. A background writer drains a 4,096-row buffer. When the buffer fills, it drops new rows and reports the drop count to stderr when it can resume. Load counters still include these requests. Startup and error messages also go to stderr.
+Use `query_log` or `-logfile` to choose the output file. A bare filename goes in `logs/`. An explicit directory in the path overrides that location. The server creates the directory as needed. The active file rotates before the next row would exceed `query_log_max_mb` or `-log-max-mb`, which defaults to 100 MB (100,000,000 bytes). Archived files keep their CSV header and get a unique timestamped name beside the active file.
 
-The server appends one semicolon-delimited row to `load.csv` at each five-minute UTC boundary, including intervals with zero requests. Set `load_log` in YAML or use `-load-log` to choose a different path. Use a separate path for each server process.
-
-```text
-window_end_utc;day_utc;avg_requests_per_second;unique_ips_5m;requests_5m;unique_ips_day;requests_day
+```sh
+./rr-mirror -logfile scans.csv -log-max-mb 50
 ```
 
-The load counters include all requests delivered to the DNS handler, including ones it drops. Each request counts once in the interval when the handler receives it. Unique IPs count distinct source addresses within the interval or UTC day. The rate is the interval total divided by 300 seconds. The first row can cover a partial interval when the server starts between boundaries. Daily totals are cumulative through the end of each row's interval. The midnight row closes the previous UTC day. Counters start over when the process restarts.
+A background writer drains a 4,096-row buffer. It drops new rows when the buffer fills. Startup messages, write errors, and drop counts go to the diagnostic file beside the query CSV, for example `logs/scans.csv.log`. A compatible terminal shows a three-line load summary that updates in place once a second. Redirected stdout stays empty.
+
+The server appends one semicolon-delimited row to `load.csv` at each five-minute UTC boundary, including intervals with zero requests. Set `load_log` in YAML or use `-load-log` to choose a different path. Use separate query and load paths for each server process. A load CSV from before peak tracking is archived beside the active file before the new header is written.
+
+```text
+window_end_utc;day_utc;avg_requests_per_second;unique_ips_5m;requests_5m;unique_ips_day;requests_day;peak_requests_per_second
+```
+
+The load counters include all requests delivered to the DNS handler, including ones it drops. Each request counts once in the interval when the handler receives it. Unique IPs count distinct source addresses within the interval or UTC day. The average rate is the interval total divided by 300 seconds. The peak is the largest request count in any one-second UTC bucket within that interval. The first row can cover a partial interval when the server starts between boundaries. Daily totals are cumulative through the end of each row's interval. The midnight row closes the previous UTC day. Counters start over when the process restarts.

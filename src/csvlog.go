@@ -38,9 +38,9 @@ type queryLog struct {
 	done    chan struct{}
 }
 
-func startQueryLog(output io.Writer, capacity int) *queryLog {
+func startQueryLog(output *rotatingQueryLog, diagnostics *log.Logger, capacity int) *queryLog {
 	l := &queryLog{rows: make(chan []string, capacity), done: make(chan struct{})}
-	go l.run(output)
+	go l.run(output, diagnostics)
 	return l
 }
 
@@ -54,40 +54,33 @@ func (l *queryLog) enqueue(row []string) {
 
 func (l *queryLog) close() {
 	close(l.rows)
-	select {
-	case <-l.done:
-	case <-time.After(time.Second):
-	}
+	<-l.done
 }
 
-func (l *queryLog) reportDropped() {
+func (l *queryLog) reportDropped(diagnostics *log.Logger) {
 	if n := atomic.SwapUint64(&l.dropped, 0); n > 0 {
-		log.Printf("dropped %d query log rows because the buffer was full", n)
+		diagnostics.Printf("dropped %d query log rows because the buffer was full", n)
 	}
 }
 
-func (l *queryLog) run(output io.Writer) {
+func (l *queryLog) run(output *rotatingQueryLog, diagnostics *log.Logger) {
 	defer close(l.done)
-	writer, err := newCSVLog(output, queryHeader)
-	if err != nil {
-		log.Printf("start query log: %v", err)
-		return
-	}
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-	defer l.reportDropped()
+	defer l.reportDropped(diagnostics)
+	var lastWriteError time.Time
 	for {
 		select {
 		case row, open := <-l.rows:
 			if !open {
 				return
 			}
-			if err := writer.write(row); err != nil {
-				log.Printf("write query log: %v", err)
-				return
+			if err := output.write(row); err != nil && time.Since(lastWriteError) >= time.Minute {
+				diagnostics.Printf("write query log: %v", err)
+				lastWriteError = time.Now()
 			}
 		case <-ticker.C:
-			l.reportDropped()
+			l.reportDropped(diagnostics)
 		}
 	}
 }

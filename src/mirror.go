@@ -44,6 +44,13 @@ func newMirror(config fileConfig) (*mirror, error) {
 		m.answerTTL = uint32(*config.AnswerTTL)
 	}
 	var err error
+	var parent string
+	if config.ParentDomain != "" {
+		parent, err = configuredDNSName(config.ParentDomain, "")
+		if err != nil {
+			return nil, fmt.Errorf("parent_domain: %w", err)
+		}
+	}
 	if m.controlIPv4, err = parseIP(config.ControlIPv4, true); err != nil {
 		return nil, fmt.Errorf("control_ipv4: %w", err)
 	}
@@ -51,7 +58,7 @@ func newMirror(config fileConfig) (*mirror, error) {
 		return nil, fmt.Errorf("control_ipv6: %w", err)
 	}
 	for name, record := range config.Records {
-		fqdn, err := dnsName(name)
+		fqdn, err := configuredDNSName(name, parent)
 		if err != nil {
 			return nil, err
 		}
@@ -69,14 +76,14 @@ func newMirror(config fileConfig) (*mirror, error) {
 
 	servers := make(map[string]nameserver, len(config.Nameservers))
 	for id, entry := range config.Nameservers {
-		server, err := newNameserver(entry)
+		server, err := newNameserver(entry, parent)
 		if err != nil {
 			return nil, fmt.Errorf("nameserver %q: %w", id, err)
 		}
 		servers[id] = server
 	}
 	for name, serverID := range config.NSRecords {
-		fqdn, err := dnsName(name)
+		fqdn, err := configuredDNSName(name, parent)
 		if err != nil {
 			return nil, err
 		}
@@ -91,17 +98,17 @@ func newMirror(config fileConfig) (*mirror, error) {
 		m.nsRecords[key] = server
 	}
 	if config.ServeSOA == nil || *config.ServeSOA {
-		if err := m.configureSOA(config.SOARecords); err != nil {
+		if err := m.configureSOA(config.SOARecords, parent); err != nil {
 			return nil, err
 		}
 	}
 	return m, nil
 }
 
-func newNameserver(config nameserverConfig) (nameserver, error) {
+func newNameserver(config nameserverConfig, parent string) (nameserver, error) {
 	var server nameserver
 	var err error
-	if server.name, err = dnsName(config.Name); err != nil {
+	if server.name, err = configuredDNSName(config.Name, parent); err != nil {
 		return server, err
 	}
 	if config.IPv4 != "" {
@@ -185,7 +192,7 @@ func (m *mirror) response(req *dns.Msg, q dns.Question, ip net.IP) *dns.Msg {
 
 var queryHeader = []string{"timestamp_unix_ns", "query_type", "query_name", "source_ip"}
 
-func (m *mirror) handler(logQuery func([]string), recordRequest func(string)) dns.HandlerFunc {
+func (m *mirror) handler(logQuery func([]string), recordRequest func(string), diagnostics *log.Logger) dns.HandlerFunc {
 	return func(w dns.ResponseWriter, req *dns.Msg) {
 		ip := w.RemoteAddr().(*net.UDPAddr).IP
 		source := ip.String()
@@ -202,7 +209,7 @@ func (m *mirror) handler(logQuery func([]string), recordRequest func(string)) dn
 
 			row := []string{strconv.FormatInt(time.Now().UnixNano(), 10), dns.TypeToString[q.Qtype], q.Name, source}
 			if err := w.WriteMsg(response); err != nil {
-				log.Printf("write DNS reply: %v", err)
+				diagnostics.Printf("write DNS reply: %v", err)
 			}
 			logQuery(row)
 			return

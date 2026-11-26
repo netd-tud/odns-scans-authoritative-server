@@ -7,13 +7,13 @@ import (
 	"github.com/miekg/dns"
 )
 
-func (m *mirror) configureSOA(records map[string]soaConfig) error {
+func (m *mirror) configureSOA(records map[string]soaConfig, parent string) error {
 	if len(records) == 0 {
 		return nil
 	}
 	m.soaRecords = make(map[string]dns.SOA, len(records))
 	for name, config := range records {
-		fqdn, err := dnsName(name)
+		fqdn, err := configuredDNSName(name, parent)
 		if err != nil {
 			return fmt.Errorf("SOA owner: %w", err)
 		}
@@ -25,7 +25,7 @@ func (m *mirror) configureSOA(records map[string]soaConfig) error {
 		if !exists {
 			return fmt.Errorf("SOA zone %q needs an apex entry in ns_records", apex)
 		}
-		mailbox, err := dnsName(config.Mailbox)
+		mailbox, err := configuredDNSName(config.Mailbox, parent)
 		if err != nil {
 			return fmt.Errorf("SOA mailbox for %q: %w", apex, err)
 		}

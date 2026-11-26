@@ -1,3 +1,4 @@
 /config.yaml
 /rr-mirror
+/logs/
 *.csv

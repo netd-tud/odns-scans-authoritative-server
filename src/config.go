@@ -69,20 +69,23 @@ type soaConfig struct {
 }
 
 type fileConfig struct {
-	Listen      listenConfig                `yaml:"listen"`
-	ControlIPv4 string                      `yaml:"control_ipv4"`
-	ControlIPv6 string                      `yaml:"control_ipv6"`
-	AnswerTTL   *uint64                     `yaml:"answer_ttl"`
-	Records     map[string]mirrorRecord     `yaml:"records"`
-	NSRecords   map[string]string           `yaml:"ns_records"`
-	ServeSOA    *bool                       `yaml:"serve_soa"`
-	SOARecords  map[string]soaConfig        `yaml:"soa_records"`
-	Nameservers map[string]nameserverConfig `yaml:"nameservers"`
-	LoadLog     string                      `yaml:"load_log"`
+	ParentDomain  string                      `yaml:"parent_domain"`
+	Listen        listenConfig                `yaml:"listen"`
+	ControlIPv4   string                      `yaml:"control_ipv4"`
+	ControlIPv6   string                      `yaml:"control_ipv6"`
+	AnswerTTL     *uint64                     `yaml:"answer_ttl"`
+	Records       map[string]mirrorRecord     `yaml:"records"`
+	NSRecords     map[string]string           `yaml:"ns_records"`
+	ServeSOA      *bool                       `yaml:"serve_soa"`
+	SOARecords    map[string]soaConfig        `yaml:"soa_records"`
+	Nameservers   map[string]nameserverConfig `yaml:"nameservers"`
+	LoadLog       string                      `yaml:"load_log"`
+	QueryLog      string                      `yaml:"query_log"`
+	QueryLogMaxMB int64                       `yaml:"query_log_max_mb"`
 }
 
 func readConfig(path string) (fileConfig, error) {
-	var config fileConfig
+	config := fileConfig{QueryLog: DefaultQueryLog, QueryLogMaxMB: DefaultQueryLogMaxMB}
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return config, err
@@ -98,6 +101,20 @@ func dnsName(name string) (string, error) {
 		return "", fmt.Errorf("invalid DNS name %q", name)
 	}
 	return dns.Fqdn(name), nil
+}
+
+func configuredDNSName(name, parent string) (string, error) {
+	const placeholder = "${parent_domain}"
+	if strings.Contains(name, placeholder) {
+		if parent == "" {
+			return "", fmt.Errorf("parent_domain is required for DNS name %q", name)
+		}
+		name = strings.ReplaceAll(name, placeholder, strings.TrimSuffix(parent, "."))
+	}
+	if strings.Contains(name, "${") {
+		return "", fmt.Errorf("unknown or incomplete DNS placeholder in %q", name)
+	}
+	return dnsName(name)
 }
 
 func parseIP(value string, ipv4 bool) (net.IP, error) {
