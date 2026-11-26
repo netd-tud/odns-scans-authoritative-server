@@ -6,6 +6,7 @@ This UDP DNS server mirrors the source IP it sees on the incoming query, which m
 
 - Go 1.15 or newer and Make. The first build needs access to a Go module proxy or a populated module cache.
 - Permission to bind the configured UDP port and write the query and load logs. Port 53 may require additional privileges.
+- `zstd` on the server's `PATH` to compress rotated query logs.
 - `dig` for the optional query examples.
 
 ## Build and run
@@ -65,6 +66,8 @@ timestamp_unix_ns;query_type;query_name;source_ip
 ```
 
 Use `query_log` or `-logfile` to choose the output file. A bare filename goes in `logs/`. An explicit directory in the path overrides that location. The server creates the directory as needed. The active file rotates before the next row would exceed `query_log_max_mb` or `-log-max-mb`, which defaults to 100 MB (100,000,000 bytes). Archived files keep their CSV header and get a unique timestamped name beside the active file.
+
+Rotated query logs are compressed in the background as `.csv.zst`. The original CSV is removed after successful compression. If `zstd` is unavailable or compression fails, the CSV is kept and the diagnostic log records the reason. Use `zstd -dc archive.csv.zst` to read a compressed log.
 
 ```sh
 ./rr-mirror -logfile scans.csv -log-max-mb 50

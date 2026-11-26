@@ -19,13 +19,14 @@ const (
 )
 
 type rotatingQueryLog struct {
-	path     string
-	maxBytes int64
-	file     *os.File
-	size     int64
-	buffer   bytes.Buffer
-	encoder  *csvLog
-	header   []byte
+	path      string
+	maxBytes  int64
+	file      *os.File
+	size      int64
+	buffer    bytes.Buffer
+	encoder   *csvLog
+	header    []byte
+	onArchive func(string)
 }
 
 func resolveQueryLogPath(path string) (string, error) {
@@ -106,31 +107,35 @@ func (l *rotatingQueryLog) rotate() error {
 	if err := l.close(); err != nil {
 		return err
 	}
-	if err := archiveLog(l.path); err != nil {
+	archive, err := archiveLog(l.path)
+	if err != nil {
 		return err
+	}
+	if l.onArchive != nil {
+		l.onArchive(archive)
 	}
 	return l.open()
 }
 
-func archiveLog(path string) error {
+func archiveLog(path string) (string, error) {
 	extension := filepath.Ext(path)
 	stem := strings.TrimSuffix(filepath.Base(path), extension)
 	stamp := time.Now().UTC().Format("20060102T150405Z")
 	// Reserve a unique filename, including when several rotations share a timestamp.
 	archive, err := ioutil.TempFile(filepath.Dir(path), stem+"-"+stamp+"-*"+extension)
 	if err != nil {
-		return err
+		return "", err
 	}
 	archivePath := archive.Name()
 	if err := archive.Close(); err != nil {
 		os.Remove(archivePath)
-		return err
+		return "", err
 	}
 	if err := os.Rename(path, archivePath); err != nil {
 		os.Remove(archivePath)
-		return err
+		return "", err
 	}
-	return nil
+	return archivePath, nil
 }
 
 func (l *rotatingQueryLog) write(row []string) error {

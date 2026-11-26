@@ -143,7 +143,7 @@ func openLoadLog(path string) (*os.File, []string, error) {
 	if fields != strings.Join(loadHeader[:len(loadHeader)-1], ";") {
 		return nil, nil, fmt.Errorf("unexpected header in load log %q", path)
 	}
-	if err := archiveLog(path); err != nil {
+	if _, err := archiveLog(path); err != nil {
 		return nil, nil, fmt.Errorf("archive load log before adding peak column: %w", err)
 	}
 	file, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_WRONLY, stat.Mode().Perm())

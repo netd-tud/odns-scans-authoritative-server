@@ -65,6 +65,10 @@ func (l *queryLog) reportDropped(diagnostics *log.Logger) {
 
 func (l *queryLog) run(output *rotatingQueryLog, diagnostics *log.Logger) {
 	defer close(l.done)
+	if compressor := startArchiveCompressor(diagnostics); compressor != nil {
+		output.onArchive = compressor.enqueue
+		defer compressor.close()
+	}
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	defer l.reportDropped(diagnostics)
